@@ -1,12 +1,17 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../App';
-import { CreditCard, History, TrendingUp, Package, Plus, Check, AlertCircle, Upload, Smartphone, ArrowRight, ShoppingCart, FileSpreadsheet, AlignLeft } from 'lucide-react';
+import { CreditCard, History, TrendingUp, Package, Plus, Check, AlertCircle, Upload, Smartphone, ArrowRight, ShoppingCart, FileSpreadsheet, AlignLeft, Info, Terminal, Search, Calendar, Filter, X, Phone, Wallet } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import * as XLSX from 'xlsx';
 import { Bundle, OrderStatus, Provider } from '../types';
 
 const DashboardView: React.FC = () => {
-  const { view } = useAppContext();
+  const { view, user } = useAppContext();
+
+  // Switch between Agent view and Regular User view
+  if (user?.parentId && view === 'dashboard') {
+      return <AgentDashboardView />;
+  }
 
   switch (view) {
     case 'buy_data': return <PurchaseSubView />;
@@ -16,6 +21,101 @@ const DashboardView: React.FC = () => {
     default:
       return <DashboardHomeSubView />;
   }
+};
+
+const AgentDashboardView = () => {
+    const { user, transactions, setView, agentParent } = useAppContext();
+    const recentOrders = transactions.slice(0, 5); // Show top 5
+
+    return (
+        <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-falcon-800 text-white p-6 rounded-xl shadow-lg">
+                <div>
+                    <h1 className="text-2xl font-bold">Welcome, {user?.name}</h1>
+                    <p className="text-falcon-200 mt-1">Agent Portal</p>
+                </div>
+                {agentParent?.shopSupportPhone && (
+                    <div className="mt-4 md:mt-0 bg-white/10 px-4 py-2 rounded-lg flex items-center">
+                        <Phone size={18} className="mr-2" />
+                        <div>
+                            <p className="text-xs text-falcon-200">Support Line</p>
+                            <p className="font-bold">{agentParent.shopSupportPhone}</p>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Important Notice */}
+            <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg shadow-sm flex items-start">
+                <AlertCircle className="text-red-500 mr-3 flex-shrink-0 mt-0.5" size={20} />
+                <div>
+                    <h3 className="text-red-800 font-bold">Important Notice</h3>
+                    <p className="text-red-700 text-sm mt-1">
+                        Our data bundles <strong>do not support</strong> EVD SIMs, Turbonet SIMs, or Broadband SIMs. Please ensure you are sending to a standard SIM card.
+                        <span className="block mt-2 font-medium">Complaints should be sent within 24 hours, else they cannot be checked.</span>
+                    </p>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 {/* Wallet Card */}
+                 <div className="bg-white p-6 rounded-xl shadow-sm border border-falcon-100">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-gray-500 font-medium">Wallet Balance</h3>
+                        <Wallet className="text-falcon-600" />
+                    </div>
+                    <p className="text-4xl font-bold text-gray-800">GH₵{user?.walletBalance.toFixed(2)}</p>
+                    <button 
+                        onClick={() => setView('wallet')}
+                        className="mt-6 w-full bg-falcon-600 hover:bg-falcon-700 text-white py-3 rounded-lg font-bold"
+                    >
+                        Top Up Wallet
+                    </button>
+                 </div>
+
+                 {/* Actions */}
+                 <div className="bg-white p-6 rounded-xl shadow-sm border border-falcon-100 flex flex-col justify-center space-y-4">
+                     <button 
+                        onClick={() => setView('buy_data')}
+                        className="w-full bg-falcon-50 hover:bg-falcon-100 text-falcon-800 py-4 rounded-xl flex items-center justify-center space-x-3 transition-colors border border-falcon-200"
+                     >
+                         <div className="bg-white p-2 rounded-full shadow-sm"><Package size={24} /></div>
+                         <span className="font-bold text-lg">Place New Order</span>
+                     </button>
+                     <button 
+                        onClick={() => setView('orders')}
+                        className="w-full bg-gray-50 hover:bg-gray-100 text-gray-800 py-4 rounded-xl flex items-center justify-center space-x-3 transition-colors border border-gray-200"
+                     >
+                         <div className="bg-white p-2 rounded-full shadow-sm"><History size={24} /></div>
+                         <span className="font-bold text-lg">Transaction History</span>
+                     </button>
+                 </div>
+            </div>
+
+            {/* Recent History */}
+            <div className="bg-white rounded-xl shadow-sm border border-falcon-100 p-6">
+                <h3 className="font-bold text-gray-800 mb-4">Recent Activity</h3>
+                <div className="space-y-3">
+                    {recentOrders.length === 0 ? <p className="text-gray-500 text-sm">No recent activity.</p> : recentOrders.map(tx => (
+                        <div key={tx.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100">
+                             <div>
+                                 <p className="font-medium text-sm text-gray-900">{tx.description}</p>
+                                 <p className="text-xs text-gray-500">{new Date(tx.date).toLocaleDateString()}</p>
+                             </div>
+                             <div className="text-right">
+                                <span className={`font-bold ${tx.type === 'DEPOSIT' ? 'text-green-600' : 'text-red-600'}`}>
+                                    {tx.type === 'DEPOSIT' ? '+' : '-'}GH₵{tx.amount.toFixed(2)}
+                                </span>
+                                <div className={`text-xs mt-1 ${tx.status === OrderStatus.COMPLETED ? 'text-green-600' : 'text-red-500'}`}>
+                                    {tx.status}
+                                </div>
+                             </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
 };
 
 const DashboardHomeSubView = () => {
@@ -36,6 +136,18 @@ const DashboardHomeSubView = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+      {/* SIM Restriction Notification */}
+      <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg shadow-sm flex items-start">
+        <AlertCircle className="text-red-500 mr-3 flex-shrink-0 mt-0.5" size={20} />
+        <div>
+          <h3 className="text-red-800 font-bold">Important Notice</h3>
+          <p className="text-red-700 text-sm mt-1">
+            Our data bundles <strong>do not support</strong> EVD SIMs, Turbonet SIMs, or Broadband SIMs. Please ensure you are sending to a standard SIM card.
+            <span className="block mt-2 font-medium">Complaints should be sent within 24 hours, else they cannot be checked.</span>
+          </p>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Balance Card */}
         <div className="bg-gradient-to-br from-falcon-800 to-falcon-600 rounded-xl p-6 text-white shadow-lg">
@@ -57,7 +169,7 @@ const DashboardHomeSubView = () => {
         </div>
 
         {/* Quick Actions */}
-        <div className="md:col-span-2 grid grid-cols-2 gap-4">
+        <div className="md:col-span-2 grid grid-cols-3 gap-4">
            <button 
              onClick={() => setView('buy_data')}
              className="bg-white p-6 rounded-xl shadow-sm border border-falcon-100 hover:shadow-md transition-all flex flex-col items-center justify-center group"
@@ -76,6 +188,16 @@ const DashboardHomeSubView = () => {
                 <History className="h-8 w-8 text-falcon-600" />
               </div>
               <span className="font-semibold text-gray-800">History</span>
+           </button>
+           
+           <button 
+             onClick={() => setView('console')}
+             className="bg-white p-6 rounded-xl shadow-sm border border-falcon-100 hover:shadow-md transition-all flex flex-col items-center justify-center group"
+            >
+              <div className="bg-red-50 p-3 rounded-full mb-3 group-hover:bg-red-100">
+                <Terminal className="h-8 w-8 text-red-600" />
+              </div>
+              <span className="font-semibold text-gray-800">Console</span>
            </button>
         </div>
       </div>
@@ -130,7 +252,7 @@ const DashboardHomeSubView = () => {
 };
 
 const PurchaseSubView = () => {
-    const { bundles, purchaseBundle } = useAppContext();
+    const { bundles, purchaseBundle, user, agentParent } = useAppContext();
     const [activeTab, setActiveTab] = useState<'single' | 'bulk_text' | 'bulk_excel'>('single');
     
     // Single Purchase State
@@ -144,12 +266,21 @@ const PurchaseSubView = () => {
     const [bulkInput, setBulkInput] = useState('');
     const [preview, setPreview] = useState<any[]>([]);
 
-    const availableBundles = bundles.filter(b => b.provider === network);
+    // Filter bundles to show only standard ones for the selected network
+    const availableBundles = bundles.filter(b => b.provider === network && b.category !== 'console');
+
+    // Helper to get display price (handles agent override visually)
+    const getPrice = (bundle: Bundle) => {
+        if (user?.parentId && agentParent?.agentPrices?.[bundle.id]) {
+            return agentParent.agentPrices[bundle.id];
+        }
+        return bundle.price;
+    };
 
     // --- Helpers ---
     const getProvider = (phone: string): Provider | null => {
         const p = phone.startsWith('0') ? phone.substring(0, 3) : '0' + phone.substring(0, 2);
-        const mtn = ['024', '054', '055', '059', '025'];
+        const mtn = ['024', '054', '055', '059', '025', '053']; // Added 053
         const telecel = ['020', '050'];
         const at = ['027', '057', '026', '056'];
 
@@ -163,7 +294,8 @@ const PurchaseSubView = () => {
         const cleanAmount = String(amountStr).toUpperCase().replace('GB', '').trim();
         return bundles.find(b => 
             b.provider === provider && 
-            b.dataAmount.replace('GB', '').trim() === cleanAmount
+            b.dataAmount.replace('GB', '').trim() === cleanAmount &&
+            b.category !== 'console' // Ensure bulk doesn't pick console
         );
     };
 
@@ -173,12 +305,6 @@ const PurchaseSubView = () => {
         if (recipient.length < 10) return alert('Invalid phone number');
         if (recipient !== confirmRecipient) return alert('Phone numbers do not match');
         
-        // Validate network prefix
-        const detected = getProvider(recipient);
-        if (detected && detected !== network) {
-            if (!confirm(`The number ${recipient} seems to be ${detected}, but you selected ${network}. Continue?`)) return;
-        }
-
         setIsSubmitting(true);
         const success = await purchaseBundle(selectedBundleId, recipient);
         setIsSubmitting(false);
@@ -261,7 +387,9 @@ const PurchaseSubView = () => {
         const validItems = preview.filter(p => p.valid);
         if (validItems.length === 0) return;
         
-        if (!confirm(`Process ${validItems.length} transactions? Total: GH₵${validItems.reduce((sum, item) => sum + item.bundle.price, 0).toFixed(2)}`)) return;
+        const totalCost = validItems.reduce((sum, item) => sum + getPrice(item.bundle), 0);
+        
+        if (!confirm(`Process ${validItems.length} transactions? Total: GH₵${totalCost.toFixed(2)}`)) return;
 
         setIsSubmitting(true);
         let successCount = 0;
@@ -343,7 +471,7 @@ const PurchaseSubView = () => {
                                         <option value="">Select a package</option>
                                         {availableBundles.map(b => (
                                             <option key={b.id} value={b.id}>
-                                                {b.dataAmount} - GH₵{b.price.toFixed(2)} ({b.validity})
+                                                {b.dataAmount} - GH₵{getPrice(b).toFixed(2)} ({b.validity})
                                             </option>
                                         ))}
                                     </select>
@@ -357,7 +485,7 @@ const PurchaseSubView = () => {
                                         onChange={(e) => setRecipient(e.target.value.replace(/\D/g,'').slice(0,10))}
                                         className="w-full border border-gray-300 rounded-md px-3 py-2.5 focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
                                     />
-                                    <p className="text-xs text-gray-400 mt-1">Enter 10-digit Ghana number</p>
+                                    <p className="text-xs text-gray-400 mt-1">Enter 10-digit Ghana number (Ported numbers allowed)</p>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-semibold text-gray-700 mb-2">Confirm Recipient</label>
@@ -416,7 +544,7 @@ const PurchaseSubView = () => {
                                                 {p.valid ? (
                                                     <div className="flex justify-between">
                                                         <span>{p.phone} ({p.provider})</span>
-                                                        <span className="font-bold">{p.bundle.dataAmount} - GH₵{p.bundle.price}</span>
+                                                        <span className="font-bold">{p.bundle.dataAmount} - GH₵{getPrice(p.bundle).toFixed(2)}</span>
                                                     </div>
                                                 ) : (
                                                     <span>{p.raw || p.phone} - {p.error}</span>
@@ -428,7 +556,7 @@ const PurchaseSubView = () => {
                                         <div className="p-3 border-t border-gray-200 bg-white">
                                             <div className="flex justify-between font-bold text-sm mb-2">
                                                 <span>Total:</span>
-                                                <span>GH₵{preview.filter(p => p.valid).reduce((acc, c) => acc + c.bundle.price, 0).toFixed(2)}</span>
+                                                <span>GH₵{preview.filter(p => p.valid).reduce((acc, c) => acc + getPrice(c.bundle), 0).toFixed(2)}</span>
                                             </div>
                                             <button 
                                                 onClick={handleBulkProcess}
@@ -565,10 +693,89 @@ const WalletSubView = () => {
 
 const OrdersSubView = () => {
   const { transactions } = useAppContext();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [dateFilter, setDateFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState<'ALL' | 'PURCHASE' | 'DEPOSIT'>('ALL');
   
+  const filteredTransactions = transactions.filter(tx => {
+    const searchLower = searchTerm.toLowerCase();
+    // Check ID, Description (which contains Phone and GB), and Amount
+    const matchesSearch = 
+      tx.id.toLowerCase().includes(searchLower) || 
+      tx.description.toLowerCase().includes(searchLower) ||
+      tx.amount.toString().includes(searchLower);
+
+    // Date check (YYYY-MM-DD string match)
+    // tx.date is ISO string, so startsWith works for YYYY-MM-DD
+    const matchesDate = dateFilter ? tx.date.startsWith(dateFilter) : true;
+    
+    // Type Check
+    let matchesType = true;
+    if (typeFilter === 'PURCHASE') {
+      matchesType = (tx.type === 'PURCHASE' || tx.type === 'BULK_PURCHASE' || tx.type === 'CONSOLE_TOPUP' || tx.type === 'CONSOLE_TRANSFER');
+    } else if (typeFilter === 'DEPOSIT') {
+      matchesType = (tx.type === 'DEPOSIT' || tx.type === 'ADMIN_CREDIT');
+    }
+
+    return matchesSearch && matchesDate && matchesType;
+  });
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Transaction History</h2>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+          <h2 className="text-2xl font-bold text-gray-900">Transaction History</h2>
+      </div>
+
+      {/* Filter Toolbar */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6">
+         <div className="flex flex-col md:flex-row gap-4">
+             {/* Search Input */}
+             <div className="flex-grow relative">
+                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                 <input 
+                    type="text" 
+                    placeholder="Search Number, ID, or GB..." 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-falcon-500 outline-none"
+                 />
+                 {searchTerm && (
+                     <button 
+                        onClick={() => setSearchTerm('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                     >
+                         <X size={14} />
+                     </button>
+                 )}
+             </div>
+
+             {/* Date Filter */}
+             <div className="relative">
+                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                 <input 
+                    type="date" 
+                    value={dateFilter}
+                    onChange={(e) => setDateFilter(e.target.value)}
+                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-falcon-500 outline-none bg-white text-gray-600 w-full md:w-auto"
+                 />
+             </div>
+
+             {/* Type Filter */}
+             <div className="relative">
+                 <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                 <select 
+                    value={typeFilter}
+                    onChange={(e) => setTypeFilter(e.target.value as any)}
+                    className="pl-10 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-falcon-500 outline-none bg-white appearance-none cursor-pointer w-full md:w-auto text-gray-600"
+                 >
+                     <option value="ALL">All Types</option>
+                     <option value="PURCHASE">Purchases</option>
+                     <option value="DEPOSIT">Deposits</option>
+                 </select>
+             </div>
+         </div>
+      </div>
+
       <div className="bg-white rounded-xl shadow-sm border border-falcon-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
@@ -582,25 +789,30 @@ const OrdersSubView = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {transactions.length === 0 ? (
-                  <tr><td colSpan={5} className="px-6 py-12 text-center text-gray-500">No transactions found</td></tr>
-              ) : transactions.map(tx => (
+              {filteredTransactions.length === 0 ? (
+                  <tr><td colSpan={5} className="px-6 py-12 text-center text-gray-500">No transactions match your search.</td></tr>
+              ) : filteredTransactions.map(tx => (
                 <tr key={tx.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(tx.date).toLocaleString()}
+                    <div className="font-medium text-gray-900">{new Date(tx.date).toLocaleDateString()}</p>
+                    <div className="text-xs text-gray-400">{new Date(tx.date).toLocaleTimeString()}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {tx.description}
+                    <div>{tx.description}</div>
+                    <div className="text-xs text-gray-400 font-mono mt-1">ID: {tx.id}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                     {tx.type === 'PURCHASE' || tx.type === 'BULK_PURCHASE' ? (
-                       <span className="flex items-center text-orange-600"><Package size={14} className="mr-1"/> Purchase</span>
+                     {tx.type === 'PURCHASE' || tx.type === 'BULK_PURCHASE' || tx.type === 'CONSOLE_TRANSFER' ? (
+                       <span className="flex items-center text-orange-600"><Package size={14} className="mr-1"/> Order</span>
+                     ) : tx.type === 'CONSOLE_TOPUP' ? (
+                        <span className="flex items-center text-blue-600"><Terminal size={14} className="mr-1"/> Topup</span>
                      ) : (
                        <span className="flex items-center text-green-600"><Plus size={14} className="mr-1"/> Deposit</span>
                      )}
                   </td>
-                  <td className={`px-6 py-4 whitespace-nowrap text-sm font-bold text-right ${tx.type === 'DEPOSIT' ? 'text-green-600' : 'text-red-600'}`}>
-                    {tx.type === 'DEPOSIT' ? '+' : '-'}GH₵{tx.amount.toFixed(2)}
+                  <td className={`px-6 py-4 whitespace-nowrap text-sm font-bold text-right ${tx.type === 'DEPOSIT' || tx.type === 'ADMIN_CREDIT' ? 'text-green-600' : 'text-red-600'}`}>
+                    {tx.type === 'DEPOSIT' || tx.type === 'ADMIN_CREDIT' ? '+' : '-'}
+                    {tx.type === 'CONSOLE_TRANSFER' ? `${tx.amount} GB` : `GH₵${tx.amount.toFixed(2)}`}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-center">
                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${

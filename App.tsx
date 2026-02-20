@@ -8,7 +8,9 @@ import {
   FileText, 
   LogOut,
   Menu,
-  X
+  X,
+  Store,
+  CheckCircle
 } from 'lucide-react';
 import { AppContextType, ViewState, User, Bundle, Transaction, UserRole } from './types';
 import { api } from './lib/backend';
@@ -16,6 +18,9 @@ import PublicViews from './views/Public';
 import AuthView from './views/Auth';
 import DashboardView from './views/Dashboard';
 import AdminView from './views/Admin';
+import MyShopView from './views/MyShop';
+import PublicShopView from './views/PublicShop';
+import ConsoleView from './views/Console';
 import AIChat from './components/AIChat';
 
 // Create Context
@@ -29,10 +34,15 @@ export const useAppContext = () => {
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
+  const [agentParent, setAgentParent] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [view, setView] = useState<ViewState>('landing');
   const [bundles, setBundles] = useState<Bundle[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [notification, setNotification] = useState<string | null>(null);
+  
+  // Public Shop State
+  const [currentShopOwner, setCurrentShopOwner] = useState<User | null>(null);
 
   // Initial Data Fetch
   useEffect(() => {
@@ -70,11 +80,18 @@ const App: React.FC = () => {
            // Refresh user balance (backend source of truth)
            const refreshedUser = await api.auth.getSession();
            if(refreshedUser) setUser(refreshedUser);
+
+           // Fetch parent if agent
+           if(refreshedUser?.parentId) {
+               const parent = await api.users.getById(refreshedUser.parentId);
+               setAgentParent(parent);
+           }
         }
       };
       fetchData();
     } else {
-        setTransactions([]);
+        if (view !== 'public_shop') setTransactions([]);
+        setAgentParent(null);
     }
   }, [user?.id, view]); // Re-fetch on view change to keep data fresh
 
@@ -83,14 +100,19 @@ const App: React.FC = () => {
     if (res.user) {
         setUser(res.user);
         setView(res.user.role === UserRole.ADMIN ? 'admin' : 'dashboard');
+        
+        // Show notification
+        setNotification("Fast delivery activated");
+        setTimeout(() => setNotification(null), 3000);
+        
         return true;
     }
     alert(res.error || 'Login failed');
     return false;
   };
 
-  const register = async (name: string, email: string, password: string, username: string, phoneNumber: string): Promise<boolean> => {
-      const res = await api.auth.register(name, email, password, username, phoneNumber);
+  const register = async (name: string, email: string, password: string, username: string, phoneNumber: string, parentId?: string): Promise<boolean> => {
+      const res = await api.auth.register(name, email, password, username, phoneNumber, parentId);
       if (res.user) {
           // Auto login after register
           await login(email, password);
@@ -126,15 +148,31 @@ const App: React.FC = () => {
         // Refresh Data
         const txs = await api.wallet.getTransactions(user.id);
         setTransactions(txs);
-        // Update local user balance immediately for UI responsiveness, fetch real later
-        const b = bundles.find(x => x.id === bundleId);
-        if(b) setUser(prev => prev ? ({...prev, walletBalance: prev.walletBalance - b.price}) : null);
+        
+        // Refresh user to get updated wallet/console balance
+        const u = await api.auth.getSession();
+        if(u) setUser(u);
         
         return true;
     } else {
         alert(res.error || 'Purchase failed');
         return false;
     }
+  };
+
+  const transferConsoleData = async (amountGB: number, phoneNumber: string): Promise<boolean> => {
+      if (!user) return false;
+      const res = await api.data.transferConsoleData(user.id, amountGB, phoneNumber);
+      if (res.success) {
+          const txs = await api.wallet.getTransactions(user.id);
+          setTransactions(txs);
+          const u = await api.auth.getSession();
+          if(u) setUser(u);
+          return true;
+      } else {
+          alert(res.error || 'Transfer failed');
+          return false;
+      }
   };
 
   const topUpWallet = async (amount: number): Promise<boolean> => {
@@ -155,6 +193,79 @@ const App: React.FC = () => {
       return await api.users.getAll();
   };
 
+  // --- Shop Methods ---
+  const updateShopSettings = async (name: string, prices: Record<string, number>, agentPrices?: Record<string, number>, supportPhone?: string) => {
+      if(!user) return false;
+      const success = await api.shop.updateSettings(user.id, name, prices, agentPrices, supportPhone);
+      if(success) {
+          // Refresh user object
+          const u = await api.auth.getSession();
+          if(u) setUser(u);
+      }
+      return success;
+  };
+
+  const cashoutProfit = async () => {
+      if(!user) return false;
+      const success = await api.shop.cashout(user.id);
+      if(success) {
+           const u = await api.auth.getSession();
+           if(u) setUser(u);
+           const txs = await api.wallet.getTransactions(user.id);
+           setTransactions(txs);
+      }
+      return success;
+  };
+
+  const viewShop = async (username: string) => {
+      setIsLoading(true);
+      const shopOwner = await api.users.getByUsername(username);
+      if (shopOwner) {
+          setCurrentShopOwner(shopOwner);
+          setView('public_shop');
+      } else {
+          alert('Shop not found');
+      }
+      setIsLoading(false);
+  };
+
+  const purchaseFromShop = async (shopOwnerId: string, bundleId: string, phoneNumber: string) => {
+      const res = await api.shop.purchaseFromShop(shopOwnerId, bundleId, phoneNumber);
+      if(res.success) {
+          return true;
+      }
+      alert(res.error || "Failed");
+      return false;
+  };
+
+  const adminAdjustUserBalance = async (userId: string, amount: number, type: 'CREDIT' | 'DEBIT') => {
+      return await api.admin.adjustBalance(userId, amount, type);
+  };
+
+  const generateApiKey = async () => {
+    if(!user) return;
+    setIsLoading(true);
+    try {
+        const newKey = await api.users.generateNewApiKey(user.id);
+        setUser({...user, apiKey: newKey});
+        setNotification("New API Key Generated");
+        setTimeout(() => setNotification(null), 3000);
+    } catch(e) {
+        alert("Failed to generate key");
+    }
+    setIsLoading(false);
+  };
+
+  const changePassword = async (oldP: string, newP: string) => {
+    if(!user) return false;
+    const res = await api.auth.changePassword(user.id, oldP, newP);
+    if(!res.success) {
+        alert(res.error);
+        return false;
+    }
+    return true;
+  };
+
   // Render logic based on view state
   const renderView = () => {
     if (isLoading) {
@@ -172,14 +283,20 @@ const App: React.FC = () => {
       case 'signup':
         return <AuthView />;
       case 'docs':
-        return user ? <PublicViews /> : <AuthView />;
+        return <PublicViews />;
       case 'dashboard':
       case 'buy_data':
       case 'wallet':
       case 'orders':
         return user ? <DashboardView /> : <AuthView />;
+      case 'console':
+          return user ? <ConsoleView /> : <AuthView />;
       case 'admin':
         return user?.role === UserRole.ADMIN ? <AdminView /> : <AuthView />;
+      case 'my_shop':
+        return user ? <MyShopView /> : <AuthView />;
+      case 'public_shop':
+          return <PublicShopView />;
       default:
         return <PublicViews />;
     }
@@ -187,11 +304,22 @@ const App: React.FC = () => {
 
   return (
     <AppContext.Provider value={{
-      user, view, isLoading, setView, login, register, logout, bundles, transactions,
-      addBundle, deleteBundle, purchaseBundle, topUpWallet, getUsers
+      user, agentParent, view, isLoading, setView, login, register, logout, bundles, transactions,
+      addBundle, deleteBundle, purchaseBundle, topUpWallet, getUsers,
+      updateShopSettings, cashoutProfit, viewShop, currentShopOwner, purchaseFromShop,
+      adminAdjustUserBalance, transferConsoleData, generateApiKey, changePassword
     }}>
-      <div className="min-h-screen flex flex-col bg-falcon-50 text-gray-800">
+      <div className="min-h-screen flex flex-col bg-falcon-50 text-gray-800 relative">
         <Navigation />
+        
+        {/* Notification Toast */}
+        {notification && (
+            <div className="fixed top-20 right-4 z-50 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg flex items-center space-x-2 animate-fade-in-down">
+                <CheckCircle size={20} />
+                <span className="font-bold">{notification}</span>
+            </div>
+        )}
+
         <main className="flex-grow">
           {renderView()}
         </main>
@@ -205,6 +333,9 @@ const App: React.FC = () => {
 const Navigation: React.FC = () => {
   const { user, view, setView, logout } = useAppContext();
   const [isOpen, setIsOpen] = useState(false);
+  
+  // Determine if user is an agent (has a parent)
+  const isAgent = !!user?.parentId;
 
   const NavLink = ({ target, label, icon: Icon }: { target: ViewState, label: string, icon?: any }) => (
     <button
@@ -220,6 +351,8 @@ const Navigation: React.FC = () => {
       <span>{label}</span>
     </button>
   );
+
+  if (view === 'public_shop') return null; // Hide main nav on public shop view usually, or keep minimal
 
   return (
     <nav className="bg-falcon-900 shadow-md sticky top-0 z-40">
@@ -242,7 +375,14 @@ const Navigation: React.FC = () => {
                   <NavLink target="buy_data" label="Buy Data" icon={ShoppingBag} />
                   <NavLink target="wallet" label="Wallet" icon={Wallet} />
                   <NavLink target="orders" label="Orders" icon={List} />
-                  <NavLink target="docs" label="API Docs" icon={FileText} />
+                  
+                  {/* Hide extra features for agents */}
+                  {!isAgent && (
+                    <>
+                        <NavLink target="my_shop" label="My Shop" icon={Store} />
+                        <NavLink target="docs" label="API Docs" icon={FileText} />
+                    </>
+                  )}
                 </>
               )}
               
@@ -310,7 +450,12 @@ const Navigation: React.FC = () => {
                   <NavLink target="buy_data" label="Buy Data" icon={ShoppingBag} />
                   <NavLink target="wallet" label="Wallet" icon={Wallet} />
                   <NavLink target="orders" label="History" icon={List} />
-                  <NavLink target="docs" label="API Docs" icon={FileText} />
+                  {!isAgent && (
+                    <>
+                        <NavLink target="my_shop" label="My Shop" icon={Store} />
+                        <NavLink target="docs" label="API Docs" icon={FileText} />
+                    </>
+                  )}
                 </>
               ) : (
                  <NavLink target="admin" label="Admin Panel" icon={ShieldCheck} />

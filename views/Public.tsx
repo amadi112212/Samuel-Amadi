@@ -1,12 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAppContext } from '../App';
-import { CheckCircle, Zap, Shield, Code, Server, Smartphone, Globe, ArrowRight } from 'lucide-react';
+import { CheckCircle, Zap, Shield, Code, Server, Smartphone, Globe, ArrowRight, Key, Copy, RefreshCw, FileCode, ArrowLeft, CreditCard } from 'lucide-react';
 import { INITIAL_BUNDLES, PUBLIC_BUNDLES } from '../constants';
 
 const PublicViews: React.FC = () => {
   const { view, setView, user } = useAppContext();
 
-  if (view === 'docs' && user) return <ApiDocs />;
+  // If viewing docs/API and user is logged in, show the new API Access page
+  if (view === 'docs' && user) return <ApiAccessView />;
+  // If viewing docs but not logged in, we could show general public API docs or redirect. 
+  // Current app logic for 'docs' usually implies authenticated view based on nav, but let's allow public see basic docs too.
+  if (view === 'docs' && !user) return <ApiDocsContent isPublic={true} />;
 
   // Landing Page
   return (
@@ -130,14 +134,191 @@ const FeatureCard = ({ icon: Icon, title, desc }: { icon: any, title: string, de
   </div>
 );
 
-const ApiDocs: React.FC = () => (
-  <div className="max-w-5xl mx-auto px-4 py-12">
-    <div className="text-center mb-12">
-      <h1 className="text-3xl font-bold text-falcon-900 mb-4">API Documentation</h1>
-      <p className="text-gray-600 max-w-2xl mx-auto">
-        Integrate Falcon Network services directly into your own applications.
-      </p>
-    </div>
+// New Component: Authenticated API Access View
+const ApiAccessView: React.FC = () => {
+    const { user, generateApiKey, changePassword } = useAppContext();
+    const [viewMode, setViewMode] = useState<'settings' | 'documentation'>('settings');
+    const [isGenerating, setIsGenerating] = useState(false);
+
+    // Password State
+    const [oldPass, setOldPass] = useState('');
+    const [newPass, setNewPass] = useState('');
+    const [confirmPass, setConfirmPass] = useState('');
+    const [passLoading, setPassLoading] = useState(false);
+
+    const handleGenerate = async () => {
+        setIsGenerating(true);
+        await generateApiKey();
+        setIsGenerating(false);
+    };
+
+    const handlePasswordChange = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (newPass !== confirmPass) {
+            alert("New passwords do not match.");
+            return;
+        }
+        if (newPass.length < 8) {
+            alert("Password must be at least 8 characters.");
+            return;
+        }
+
+        setPassLoading(true);
+        const success = await changePassword(oldPass, newPass);
+        setPassLoading(false);
+        if (success) {
+            alert("Password changed successfully.");
+            setOldPass('');
+            setNewPass('');
+            setConfirmPass('');
+        }
+    };
+
+    const copyToClipboard = () => {
+        if(user?.apiKey) {
+            navigator.clipboard.writeText(user.apiKey);
+            alert("API Key copied to clipboard");
+        }
+    };
+
+    if (viewMode === 'documentation') {
+        return (
+            <div className="bg-white">
+                <div className="max-w-6xl mx-auto p-4 border-b border-gray-200 mb-6 flex justify-between items-center">
+                    <h2 className="text-xl font-bold text-gray-800">API Documentation</h2>
+                    <button 
+                        onClick={() => setViewMode('settings')}
+                        className="text-falcon-600 hover:text-falcon-800 font-medium flex items-center"
+                    >
+                        <ArrowLeft size={16} className="mr-1" /> Back to API Access
+                    </button>
+                </div>
+                <ApiDocsContent />
+            </div>
+        );
+    }
+
+    return (
+        <div className="max-w-4xl mx-auto px-4 py-8 space-y-8 animate-fade-in">
+            {/* API Access Section */}
+            <div>
+                <div className="bg-falcon-800 text-white px-6 py-3 rounded-t-lg flex items-center">
+                    <Key className="mr-2" size={20} />
+                    <h2 className="font-bold text-lg">API Access</h2>
+                </div>
+                <div className="bg-white p-6 rounded-b-lg shadow-md border border-falcon-200">
+                    <div className="mb-6">
+                        <label className="block text-gray-700 font-bold mb-2">Your API Key</label>
+                        <div className="flex shadow-sm rounded-md">
+                            <input 
+                                type="text" 
+                                readOnly 
+                                value={user?.apiKey || 'No API Key generated yet'} 
+                                className="flex-grow bg-gray-100 text-gray-600 border border-gray-300 rounded-l-md px-4 py-3 focus:outline-none font-mono text-sm"
+                            />
+                            <button 
+                                onClick={copyToClipboard}
+                                className="bg-white border border-l-0 border-falcon-600 text-falcon-600 px-4 py-2 rounded-r-md hover:bg-falcon-50 transition-colors"
+                                title="Copy Key"
+                            >
+                                <Copy size={20} />
+                            </button>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">Keep your API key private.</p>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-4">
+                        <button 
+                            onClick={handleGenerate}
+                            disabled={isGenerating}
+                            className="bg-falcon-700 hover:bg-falcon-800 text-white font-bold py-2.5 px-6 rounded-md shadow-sm flex items-center justify-center transition-colors disabled:opacity-50"
+                        >
+                            <RefreshCw size={18} className={`mr-2 ${isGenerating ? 'animate-spin' : ''}`} />
+                            {user?.apiKey ? 'Regenerate API Key' : 'Generate API Key'}
+                        </button>
+                        
+                        <button 
+                            onClick={() => setViewMode('documentation')}
+                            className="bg-white border border-falcon-600 text-falcon-600 hover:bg-falcon-50 font-bold py-2.5 px-6 rounded-md shadow-sm flex items-center justify-center transition-colors"
+                        >
+                            <FileCode size={18} className="mr-2" />
+                            API Documentation
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Change Password Section */}
+            <div>
+                <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
+                    <h3 className="text-lg font-bold text-gray-800 mb-6 border-b pb-2">Change Password</h3>
+                    
+                    <form onSubmit={handlePasswordChange} className="space-y-5">
+                        <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-1">Old Password</label>
+                            <input 
+                                type="password" 
+                                required
+                                value={oldPass}
+                                onChange={(e) => setOldPass(e.target.value)}
+                                className="w-full border border-gray-300 rounded-md px-3 py-2.5 focus:ring-2 focus:ring-falcon-500 outline-none"
+                                placeholder="Enter the old password"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-1">New Password (It must be 8 characters)</label>
+                            <input 
+                                type="password" 
+                                required
+                                minLength={8}
+                                value={newPass}
+                                onChange={(e) => setNewPass(e.target.value)}
+                                className="w-full border border-gray-300 rounded-md px-3 py-2.5 focus:ring-2 focus:ring-falcon-500 outline-none"
+                                placeholder="Enter the new password"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-1">Confirm Password (It must be 8 characters)</label>
+                            <input 
+                                type="password" 
+                                required
+                                minLength={8}
+                                value={confirmPass}
+                                onChange={(e) => setConfirmPass(e.target.value)}
+                                className="w-full border border-gray-300 rounded-md px-3 py-2.5 focus:ring-2 focus:ring-falcon-500 outline-none"
+                                placeholder="Confirm new password"
+                            />
+                        </div>
+
+                        <div className="flex justify-end pt-2">
+                            <button 
+                                type="submit" 
+                                disabled={passLoading}
+                                className="bg-falcon-700 hover:bg-falcon-800 text-white font-bold py-2 px-6 rounded-md shadow-sm transition-colors disabled:opacity-50"
+                            >
+                                {passLoading ? 'Updating...' : 'Change Password'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// Extracted Documentation Content for re-use
+const ApiDocsContent: React.FC<{isPublic?: boolean}> = ({ isPublic = false }) => (
+  <div className={`max-w-5xl mx-auto px-4 ${isPublic ? 'py-12' : 'py-4'}`}>
+    {isPublic && (
+        <div className="text-center mb-12">
+            <h1 className="text-3xl font-bold text-falcon-900 mb-4">API Documentation</h1>
+            <p className="text-gray-600 max-w-2xl mx-auto">
+                Integrate Falcon Network services directly into your own applications.
+            </p>
+        </div>
+    )}
 
     <div className="space-y-12">
       {/* Auth Section */}
@@ -151,7 +332,7 @@ const ApiDocs: React.FC = () => (
             <code className="text-sm text-falcon-800 font-mono">Authorization: Bearer &lt;YOUR_API_KEY&gt;</code>
           </div>
           <div className="p-6">
-            <p className="text-gray-600 mb-4">All API requests must be authenticated using a Bearer token.</p>
+            <p className="text-gray-600 mb-4">All API requests must be authenticated using a Bearer token. Generate your key in the API Access dashboard.</p>
           </div>
         </div>
       </section>
@@ -186,6 +367,28 @@ const ApiDocs: React.FC = () => (
 }`}
               </pre>
             </div>
+          </div>
+        </div>
+      </section>
+      
+      {/* Balance Endpoint */}
+      <section>
+        <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center">
+          <CreditCard className="mr-2 text-falcon-600" /> Check Balance
+        </h2>
+        <div className="bg-slate-900 rounded-lg shadow-lg overflow-hidden text-white">
+          <div className="bg-slate-800 px-6 py-3 flex items-center">
+            <span className="bg-green-500 text-white px-2 py-1 rounded text-xs font-bold uppercase mr-3">GET</span>
+            <code className="font-mono text-sm">/api/v1/balance</code>
+          </div>
+          <div className="p-6">
+              <h4 className="text-gray-400 text-xs uppercase font-bold mb-2">Response (200 OK)</h4>
+              <pre className="font-mono text-sm text-green-400">
+{`{
+  "wallet_balance": 50.00,
+  "currency": "GHS"
+}`}
+              </pre>
           </div>
         </div>
       </section>

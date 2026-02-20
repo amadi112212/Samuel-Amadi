@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../App';
 import { Bundle, Provider, User } from '../types';
-import { Trash2, PlusCircle, Edit, Users, Package, Check } from 'lucide-react';
+import { Trash2, PlusCircle, Edit, Users, Package, Check, X, CreditCard } from 'lucide-react';
 
 const AdminView: React.FC = () => {
-  const { bundles, addBundle, deleteBundle, getUsers } = useAppContext();
+  const { bundles, addBundle, deleteBundle, getUsers, adminAdjustUserBalance } = useAppContext();
   const [activeTab, setActiveTab] = useState<'bundles' | 'users'>('bundles');
   const [users, setUsers] = useState<User[]>([]);
   
@@ -19,6 +19,10 @@ const AdminView: React.FC = () => {
     validity: '',
     description: ''
   });
+
+  // Balance Adjustment Modal State
+  const [adjustModal, setAdjustModal] = useState<{ isOpen: boolean, userId: string, userName: string, type: 'CREDIT' | 'DEBIT' } | null>(null);
+  const [adjustAmount, setAdjustAmount] = useState('');
 
   useEffect(() => {
       if (activeTab === 'users') {
@@ -57,8 +61,26 @@ const AdminView: React.FC = () => {
       }
   };
 
+  const openAdjustModal = (user: User, type: 'CREDIT' | 'DEBIT') => {
+      setAdjustModal({ isOpen: true, userId: user.id, userName: user.name, type });
+      setAdjustAmount('');
+  };
+
+  const handleAdjustBalance = async () => {
+      if (!adjustModal || !adjustAmount || isNaN(Number(adjustAmount))) return;
+      
+      const success = await adminAdjustUserBalance(adjustModal.userId, Number(adjustAmount), adjustModal.type);
+      if (success) {
+          alert(`Successfully ${adjustModal.type === 'CREDIT' ? 'credited' : 'debited'} user.`);
+          setAdjustModal(null);
+          fetchUsers(); // Refresh list
+      } else {
+          alert('Operation failed. Ensure sufficient funds for debit.');
+      }
+  };
+
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
+    <div className="max-w-7xl mx-auto px-4 py-8 relative">
       <div className="flex justify-between items-center mb-8">
         <div>
            <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
@@ -175,9 +197,9 @@ const AdminView: React.FC = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Username</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Balance</th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Manage Funds</th>
                     </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -186,9 +208,24 @@ const AdminView: React.FC = () => {
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{u.name}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{u.username}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{u.email}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{u.phoneNumber}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{u.role}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-bold text-gray-700">GH₵{u.walletBalance.toFixed(2)}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                            <div className="flex justify-center space-x-2">
+                                <button 
+                                    onClick={() => openAdjustModal(u, 'CREDIT')}
+                                    className="bg-green-100 hover:bg-green-200 text-green-700 px-3 py-1 rounded-md text-xs font-bold transition-colors"
+                                >
+                                    + Credit
+                                </button>
+                                <button 
+                                    onClick={() => openAdjustModal(u, 'DEBIT')}
+                                    className="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1 rounded-md text-xs font-bold transition-colors"
+                                >
+                                    - Debit
+                                </button>
+                            </div>
+                        </td>
                     </tr>
                     ))}
                     {users.length === 0 && (
@@ -196,6 +233,59 @@ const AdminView: React.FC = () => {
                     )}
                 </tbody>
              </table>
+          </div>
+      )}
+
+      {/* Adjust Balance Modal */}
+      {adjustModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 animate-fade-in">
+                  <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-lg font-bold text-gray-900">
+                          {adjustModal.type === 'CREDIT' ? 'Credit Wallet' : 'Debit Wallet'}
+                      </h3>
+                      <button onClick={() => setAdjustModal(null)} className="text-gray-400 hover:text-gray-600">
+                          <X size={20} />
+                      </button>
+                  </div>
+                  
+                  <div className="mb-4 bg-gray-50 p-3 rounded-lg text-sm">
+                      <p className="text-gray-500">User:</p>
+                      <p className="font-bold text-gray-900">{adjustModal.userName}</p>
+                  </div>
+
+                  <div className="mb-6">
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Amount (GH₵)</label>
+                      <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold">GH₵</span>
+                          <input 
+                              type="number"
+                              autoFocus
+                              value={adjustAmount}
+                              onChange={(e) => setAdjustAmount(e.target.value)}
+                              className="w-full border border-gray-300 rounded-lg pl-10 pr-4 py-2 focus:ring-2 focus:ring-falcon-500 outline-none"
+                              placeholder="0.00"
+                          />
+                      </div>
+                  </div>
+
+                  <div className="flex space-x-3">
+                      <button 
+                          onClick={() => setAdjustModal(null)}
+                          className="flex-1 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm font-medium"
+                      >
+                          Cancel
+                      </button>
+                      <button 
+                          onClick={handleAdjustBalance}
+                          className={`flex-1 py-2 text-white rounded-lg text-sm font-bold shadow-sm ${
+                              adjustModal.type === 'CREDIT' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
+                          }`}
+                      >
+                          Confirm {adjustModal.type === 'CREDIT' ? 'Credit' : 'Debit'}
+                      </button>
+                  </div>
+              </div>
           </div>
       )}
     </div>
